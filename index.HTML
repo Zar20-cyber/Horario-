@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Malla Curricular Interactiva - Ingeniería Mecánica (IPN)</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --card:#ffffff; --muted:#6b7280; --accent:#7aa3ff; --success:#7ed96b; --danger:#ff8a8a;
+    --glass: rgba(255,255,255,0.7);
+    --shadow: 0 6px 18px rgba(30,41,59,0.06);
+    --soft: #eef6ff;
+  }
+  *{box-sizing:border-box;font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+  body{margin:0;background:linear-gradient(180deg,var(--bg),#eef4fb);color:#0f172a;padding:24px}
+  h1{font-size:20px;margin:0 0 12px}
+  .wrap{max-width:1300px;margin:0 auto}
+  .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .btn{background:var(--card);border:1px solid #e6eefc;padding:8px 12px;border-radius:10px;cursor:pointer;box-shadow:var(--shadow)}
+  .btn.secondary{background:transparent;border:1px dashed #d7e6ff}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .semester{background:linear-gradient(180deg, var(--glass), #fff);padding:12px;border-radius:12px;border:1px solid rgba(120,144,200,0.06);box-shadow:var(--shadow);min-height:120px}
+  .sem-head{font-weight:700;font-size:13px;margin-bottom:8px;color:#0b1220}
+  .course{background:var(--card);border-radius:8px;padding:8px;border:1px solid #eef6ff;display:flex;flex-direction:column;gap:6px;position:relative;cursor:pointer}
+  .course.locked{opacity:0.6;cursor:not-allowed}
+  .course .title{font-weight:600;font-size:13px}
+  .meta{font-size:12px;color:var(--muted)}
+  .credits{display:inline-block;padding:4px 6px;border-radius:999px;font-size:12px;background:#f0fbf5;color:#065f3a;font-weight:600}
+  .status{position:absolute;right:8px;top:8px;font-size:12px;padding:4px 6px;border-radius:6px}
+  .status.done{background:linear-gradient(90deg,#e6fbec,#d0f6d1);color:#065f3a;border:1px solid rgba(6,95,58,0.06)}
+  .status.lock{background:linear-gradient(90deg,#fff6f6,#fff0f0);color:#8a1f1f;border:1px solid rgba(255,138,138,0.06)}
+  .tooltip{position:relative}
+  .tooltip[data-tooltip]:hover:after{content:attr(data-tooltip);position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 8px);background:#0f172a;color:#fff;padding:8px;border-radius:8px;font-size:12px;white-space:pre-line;box-shadow:0 6px 18px rgba(2,6,23,0.2);z-index:50;min-width:160px}
+  .small{font-size:12px;color:var(--muted)}
+  .legend{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .legend .item{display:flex;gap:6px;align-items:center}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .dot.done{background:var(--success)}
+  .dot.lock{background:var(--danger)}
+  @media (max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:600px){.grid{grid-template-columns:repeat(1,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Malla Curricular Interactiva — Ingeniería Mecánica (IPN)</h1>
+  <div class="controls">
+    <button id="reset" class="btn">Resetear progreso</button>
+    <button id="export" class="btn secondary">Exportar progreso (JSON)</button>
+    <div style="margin-left:auto" class="small">Progreso guardado en <code>localStorage</code></div>
+  </div>
+
+  <div id="malla" class="grid" aria-live="polite"></div>
+  <div class="legend">
+    <div class="item"><span class="dot done"></span><span class="small">Aprobada</span></div>
+    <div class="item"><span class="dot lock"></span><span class="small">Bloqueada (faltan prerrequisitos)</span></div>
+  </div>
+</div>
+
+<script>
+// Data: id, title, semester (I..IX), credits string, prereqs: array of ids
+const courses = [
+  // Semestre I
+  {id:'cal1',sem:'I',title:'CÁLCULO DIFERENCIAL E INTEGRAL',credits:'T 6.0 — P — T/H 6.0 C 12.0',prereq:[]},
+  {id:'fis1',sem:'I',title:'FÍSICA CLÁSICA',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:[]},
+  {id:'alg',sem:'I',title:'FUNDAMENTOS DE ÁLGEBRA',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:[]},
+  {id:'prog',sem:'I',title:'FUNDAMENTOS DE PROGRAMACIÓN',credits:'T 3.0 P 3.0 T/H 6.0 C 9.0',prereq:[]},
+  {id:'hum1',sem:'I',title:'HUMANIDADES I (INGENIERÍA CIENCIA Y SOCIEDAD)',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:[]},
+  {id:'quim1',sem:'I',title:'QUÍMICA BÁSICA',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:[]},
+  // Semestre II
+  {id:'cal2',sem:'II',title:'CÁLCULO VECTORIAL',credits:'T 6.0 — T/H 6.0 C 12.0',prereq:['cal1']},
+  {id:'dibujo',sem:'II',title:'DIBUJO ASISTIDO POR COMPUTADORA',credits:'T 1.5 P 3.0 T/H 4.5 C 6.0',prereq:[]},
+  {id:'elec1',sem:'II',title:'ELÉCTRICIDAD Y MAGNETISMO',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['fis1']},
+  {id:'hum2',sem:'II',title:'HUMANIDADES II (LA COMUNICACIÓN Y LA INGENIERÍA)',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:['hum1']},
+  {id:'metnum',sem:'II',title:'MÉTODOS NUMÉRICOS',credits:'T 3.0 P 3.0 T/H 6.0 C 9.0',prereq:['alg','prog','cal1']},
+  {id:'quim2',sem:'II',title:'QUÍMICA APLICADA',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['quim1']},
+  // Sem III
+  {id:'adm',sem:'III',title:'ADMINISTRACIÓN',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:[]},
+  {id:'mat1',sem:'III',title:'CIENCIA DE LOS MATERIALES I',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['quim2']},
+  {id:'circuits',sem:'III',title:'CIRCUITOS ELÉCTRICOS',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['elec1']},
+  {id:'ed',sem:'III',title:'ECUACIONES DIFERENCIALES',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:['cal2']},
+  {id:'est',sem:'III',title:'ESTÁTICA',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['fis1','cal1']},
+  {id:'metro',sem:'III',title:'METROLOGÍA DIMENSIONAL',credits:'T 1.5 P 3.0 T/H 4.5 C 6.0',prereq:[]},
+  // Sem IV
+  {id:'mat2',sem:'IV',title:'CIENCIA DE MATERIALES II',credits:'T 3.0 P 3.0 T/H 6.0 C 9.0',prereq:['mat1']},
+  {id:'dinp',sem:'IV',title:'DINÁMICA DE LA PARTÍCULA',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:['est']},
+  {id:'hum3',sem:'IV',title:'HUMANIDADES III (DESARROLLO HUMANO)',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:['hum2']},
+  {id:'mach',sem:'IV',title:'MÁQUINAS ELÉCTRICAS',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['circuits']},
+  {id:'mechmat1',sem:'IV',title:'MECÁNICA DE MATERIALES I',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['est']},
+  {id:'termo1',sem:'IV',title:'TERMODINÁMICA I',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['cal2']},
+  // Sem V
+  {id:'dinrigid',sem:'V',title:'DINÁMICA DE CUERPO RÍGIDO',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['dinp','est']},
+  {id:'elec_dig',sem:'V',title:'ELECTRÓNICA DE POTENCIA APLICADA',credits:'T 3.0 P 3.0 T/H 6.0 C 9.0',prereq:['circuits']},
+  {id:'mechfluid1',sem:'V',title:'MECÁNICA DE FLUIDOS I',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['fis1','cal2']},
+  {id:'mechmat2',sem:'V',title:'MECÁNICA DE MATERIALES II',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['mechmat1']},
+  {id:'transfer',sem:'V',title:'TRANSFERENCIA DE CALOR',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['termo1','mechfluid1']},
+  // Sem VI
+  {id:'elec_dig_app',sem:'VI',title:'ELECTRÓNICA DIGITAL APLICADA',credits:'T 3.0 P 3.0 T/H 6.0 C 9.0',prereq:['prog','circuits']},
+  {id:'manuf1',sem:'VI',title:'INGENIERÍA DE MANUFACTURA I',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['adm']},
+  {id:'mechfluid2',sem:'VI',title:'MECÁNICA DE FLUIDOS II',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['mechfluid1']},
+  {id:'mecanismos',sem:'VI',title:'MECANISMOS',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['dinrigid']},
+  {id:'prob',sem:'VI',title:'PROBABILIDAD Y ESTADÍSTICA',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:['ed']},
+  // Sem VII
+  {id:'anecon',sem:'VII',title:'ANÁLISIS ECONÓMICO',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:['adm']},
+  {id:'diseño_elem',sem:'VII',title:'DISEÑO DE ELEMENTOS MECÁNICOS',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['mechmat2','dinrigid']},
+  {id:'manuf2',sem:'VII',title:'INGENIERÍA DE MANUFACTURA II',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['manuf1']},
+  {id:'intro_aut',sem:'VII',title:'INTRODUCCIÓN A SISTEMAS AUTOMÁTICOS',credits:'T 0.0 P 3.0 T/H 3.0 C 3.0',prereq:['prog']},
+  {id:'mach_hyd',sem:'VII',title:'MÁQUINAS HIDRÁULICAS',credits:'T 4.5 P 1.5 T/H 6.0 C 10.5',prereq:['mechfluid1']},
+  // Sem VIII
+  {id:'proy',sem:'VIII',title:'DESARROLLO PROSPECTIVO DE PROYECTOS / TÓPICOS SELECTOS I',credits:'T 1.5 P 3.0 T/H 4.5 C 6.0',prereq:[]},
+  {id:'dinmaq',sem:'VIII',title:'DINÁMICA DE MAQUINARIA',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:['mecanismos']},
+  {id:'eval',sem:'VIII',title:'EVALUACIÓN DE PROYECTOS',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:['anecon']},
+  {id:'hum4',sem:'VIII',title:'HUMANIDADES IV (DESARROLLO PERSONAL Y PROFESIONAL)',credits:'T 3.0 — T/H 3.0 C 6.0',prereq:['hum3']},
+  {id:'opt1',sem:'VIII',title:'OPTATIVA A',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:[]},
+  // Sem IX
+  {id:'hum5',sem:'IX',title:'HUMANIDADES V (EL HUMANISMO FRENTE A LA GLOBALIZACIÓN)',credits:'T 4.5 — T/H 4.5 C 9.0',prereq:['hum4']},
+  {id:'opt2',sem:'IX',title:'OPTATIVA B',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:[]},
+  {id:'opt3',sem:'IX',title:'OPTATIVA C',credits:'T 3.0 P 1.5 T/H 4.5 C 7.5',prereq:[]},
+  {id:'proy2',sem:'IX',title:'PROYECTO DE INGENIERÍA / TÓPICOS SELECTOS II',credits:'T 0.0 P 6.0 T/H 6.0 C 6.0',prereq:['proy']}
+];
+
+const semesters = ['I','II','III','IV','V','VI','VII','VIII','IX'];
+const STORAGE_KEY = 'malla_ipn_mec_prog_v1';
+
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw?JSON.parse(raw):[];
+  }catch(e){return []}
+}
+function saveProgress(arr){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(arr));
+}
+
+let approved = new Set(loadProgress());
+
+function missingPrereqs(course){
+  return course.prereq.filter(r=>!approved.has(r));
+}
+
+function render(){
+  const container = document.getElementById('malla');
+  container.innerHTML = '';
+  for(const sem of semesters){
+    const semDiv = document.createElement('div');
+    semDiv.className='semester';
+    const head = document.createElement('div'); head.className='sem-head'; head.textContent = `SEMESTRE ${sem}`;
+    semDiv.appendChild(head);
+    const list = document.createElement('div'); list.style.display='grid'; list.style.gap='8px';
+    const cs = courses.filter(c=>c.sem===sem);
+    if(cs.length===0){ const e=document.createElement('div'); e.className='small'; e.textContent='(sin materias)'; list.appendChild(e);} 
+    for(const c of cs){
+      const card = document.createElement('div'); card.className='course tooltip';
+      const tit = document.createElement('div'); tit.className='title'; tit.textContent=c.title;
+      const meta = document.createElement('div'); meta.className='meta'; meta.textContent=c.credits;
+      const status = document.createElement('div');
+      const miss = missingPrereqs(c);
+      if(approved.has(c.id)){
+        status.className='status done'; status.textContent='Aprobada';
+        card.classList.add('done');
+      } else if(miss.length>0){
+        status.className='status lock'; status.textContent='Bloqueada';
+        card.classList.add('locked');
+        const names = miss.map(id=>courses.find(x=>x.id===id)?.title||id);
+        card.setAttribute('data-tooltip', 'Faltan pre requisitos:\n- '+names.join('\n- '));
+      } else {
+        status.className='status'; status.textContent='Sin cursar';
+      }
+      card.appendChild(tit);
+      card.appendChild(meta);
+      card.appendChild(status);
+
+      // Click handler
+      card.addEventListener('click', (e)=>{
+        if(approved.has(c.id)){
+          // unapprove
+          approved.delete(c.id);
+          saveProgress(Array.from(approved));
+          render();
+        } else {
+          const miss2 = missingPrereqs(c);
+          if(miss2.length>0){
+            // show small shake or flash tooltip
+            card.animate([{transform:'translateY(0)'},{transform:'translateY(-6px)'},{transform:'translateY(0)'}],{duration:300});
+            return;
+          }
+          approved.add(c.id);
+          saveProgress(Array.from(approved));
+          render();
+        }
+      });
+
+      // tooltip accessible title for screen readers
+      if(!card.getAttribute('data-tooltip')) card.setAttribute('title', c.credits);
+
+      list.appendChild(card);
+    }
+
+    semDiv.appendChild(list);
+    container.appendChild(semDiv);
+  }
+}
+
+// Controls
+document.getElementById('reset').addEventListener('click', ()=>{
+  if(confirm('¿Seguro que quieres resetear tu progreso?')){
+    approved = new Set(); saveProgress([]); render();
+  }
+});
+
+document.getElementById('export').addEventListener('click', ()=>{
+  const data = {approved:Array.from(approved),timestamp:new Date().toISOString()};
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='malla_progreso.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+
+// Initial render
+render();
+
+// Accessibility note: keyboard toggle (space/enter)
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Enter' || e.key===' '){
+    const el = document.activeElement;
+    if(el && el.classList && el.classList.contains('course')) el.click();
+  }
+});
+
+// Make course cards focusable for keyboard
+function makeFocusable(){
+  document.querySelectorAll('.course').forEach((el)=>el.setAttribute('tabindex','0'));
+}
+// Observe and set focusable after render
+const obs = new MutationObserver(()=>{ makeFocusable(); });
+obs.observe(document.getElementById('malla'),{childList:true,subtree:true});
+makeFocusable();
+</script>
+</body>
+</html>
